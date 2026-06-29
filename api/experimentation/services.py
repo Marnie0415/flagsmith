@@ -56,12 +56,16 @@ from experimentation.stats import (
 )
 from features.models import FeatureState
 from features.value_types import BOOLEAN, INTEGER, STRING
-from features.versioning.dataclasses import FlagChangeSet
+from features.versioning.dataclasses import FlagChangeSet, MultivariateValueChangeSet
 from features.versioning.versioning_service import update_flag
 from integrations.flagsmith.client import get_openfeature_client
 from segments.models import Condition, Segment, SegmentRule
 
-_ROLLOUT_VALUE_TYPE = {INTEGER: "integer", STRING: "string", BOOLEAN: "boolean"}
+_ROLLOUT_VALUE_TYPE: dict[str, "FeatureValueType"] = {
+    INTEGER: "integer",
+    STRING: "string",
+    BOOLEAN: "boolean",
+}
 
 if typing.TYPE_CHECKING:
     from collections.abc import Sequence
@@ -69,6 +73,8 @@ if typing.TYPE_CHECKING:
 
     from experimentation.models import Experiment, Metric, WarehouseConnection
     from experimentation.types import ExposureGranularity
+    from features.feature_states.models import FeatureValueType
+    from features.models import FeatureStateValue
     from organisations.models import Organisation
     from users.models import FFAdminUser
 
@@ -574,14 +580,58 @@ def _sync_rollout_segment(experiment: Experiment, rollout_percentage: float) -> 
     return segment
 
 
+def _reset_default_allocations_to_control(
+    experiment: Experiment, author: AuthorData
+) -> None:
+    """Zero every variant's allocation on the feature's environment-default
+    feature state, leaving control (the unallocated remainder) at 100%.
+
+    Run once, when the rollout segment is first created: identities outside the
+    rollout cohort should all receive control while the experiment runs.
+    """
+    option_ids = list(
+        experiment.feature.multivariate_options.values_list("id", flat=True)
+    )
+    if not option_ids:
+        return
+    default_state = FeatureState.objects.get_live_feature_states(
+        environment=experiment.environment,
+        additional_filters=Q(feature_segment__isnull=True, identity__isnull=True),
+        feature_id=experiment.feature_id,
+    ).latest("id")
+    str_value, value_type = _serialize_feature_state_value(
+        default_state.feature_state_value
+    )
+    update_flag(
+        experiment.environment,
+        experiment.feature,
+        FlagChangeSet(
+            author=author,
+            enabled=default_state.enabled,
+            feature_state_value=str_value,
+            type_=value_type,
+            multivariate_values=[
+                MultivariateValueChangeSet(
+                    multivariate_feature_option_id=option_id,
+                    percentage_allocation=0,
+                )
+                for option_id in option_ids
+            ],
+        ),
+    )
+
+
 def apply_experiment_rollout(experiment: Experiment, spec: RolloutSpec) -> None:
     if experiment.status == ExperimentStatus.COMPLETED:
         raise ValidationError(
             f"Cannot change the rollout of a {experiment.status} experiment."
         )
     validate_rollout_spec(experiment, spec)
+    is_first_rollout = experiment.rollout_segment_id is None
     with transaction.atomic():
         segment = _sync_rollout_segment(experiment, spec.rollout_percentage)
+        if is_first_rollout:
+            _reset_default_allocations_to_control(experiment, spec.author)
         update_flag(
             experiment.environment,
             experiment.feature,
@@ -594,6 +644,17 @@ def apply_experiment_rollout(experiment: Experiment, spec: RolloutSpec) -> None:
                 multivariate_values=spec.multivariate_values,
             ),
         )
+
+
+def _serialize_feature_state_value(
+    value: FeatureStateValue,
+) -> tuple[str, FeatureValueType]:
+    """Render a stored feature state value as the (string, API type) pair that
+    a `FlagChangeSet` expects."""
+    return (
+        str(value.value).lower() if value.type == BOOLEAN else str(value.value),
+        _ROLLOUT_VALUE_TYPE.get(value.type or STRING, "string"),
+    )
 
 
 def get_experiment_rollout(experiment: Experiment) -> dict[str, typing.Any] | None:
@@ -612,16 +673,13 @@ def get_experiment_rollout(experiment: Experiment) -> dict[str, typing.Any] | No
     condition = Condition.objects.get(
         rule__segment_id=segment_id, operator=PERCENTAGE_SPLIT
     )
-    value = feature_state.feature_state_value
+    str_value, value_type = _serialize_feature_state_value(
+        feature_state.feature_state_value
+    )
     return {
         "enabled": feature_state.enabled,
         "rollout_percentage": float(condition.value or 0),
-        "feature_state_value": {
-            "type": _ROLLOUT_VALUE_TYPE.get(value.type or STRING, "string"),
-            "value": (
-                str(value.value).lower() if value.type == BOOLEAN else str(value.value)
-            ),
-        },
+        "feature_state_value": {"type": value_type, "value": str_value},
         "multivariate_feature_state_values": [
             {
                 "multivariate_feature_option": mv.multivariate_feature_option_id,
