@@ -6,6 +6,7 @@ import typing
 import uuid
 from copy import deepcopy
 
+import structlog
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import (
@@ -83,6 +84,7 @@ from projects.tags.models import Tag
 from . import audit_helpers
 
 logger = logging.getLogger(__name__)
+event_logger = structlog.get_logger("features")
 
 if typing.TYPE_CHECKING:
     from environments.identities.models import Identity
@@ -871,22 +873,38 @@ class FeatureState(
 
     @hook(BEFORE_CREATE)
     def check_mv_hashing_salt_preserved(self):  # type: ignore[no-untyped-def]
-        """Fail if a feature state is recreated without keeping its bucketing salt.
+        """Complain if a feature state is recreated without keeping its bucketing salt.
 
-        Under v2 versioning a feature state must be recreated via clone(), which
-        copies mv_hashing_salt so multivariate variant assignment stays stable for
-        enrolled identities. clone() always sets a non-null salt, so a freshly
-        created state with no salt that the previous version already had was made
-        some other way and would re-bucket those identities. Raise so the
-        offending path is caught in tests. Identity overrides are skipped: they
-        are not versioned or cloned. See
+        A feature state must be recreated via clone(), which copies
+        mv_hashing_salt so multivariate variant assignment stays stable for
+        enrolled identities, or set the salt explicitly (see
+        get_mv_hashing_salt_for_successor call sites). A freshly created state
+        with no salt whose lineage already existed was made some other way and
+        re-buckets those identities: raise under v2 versioning so the offending
+        path is caught in tests; warn under v1. Identity overrides are skipped:
+        they are not versioned or cloned. See
         https://github.com/Flagsmith/flagsmith/issues/7913.
         """
-        if (
-            self.mv_hashing_salt is not None
-            or self.identity_id is not None
-            or not self.environment.use_v2_feature_versioning  # type: ignore[union-attr]
-        ):
+        if self.mv_hashing_salt is not None or self.identity_id is not None:
+            return
+
+        if not self.environment.use_v2_feature_versioning:  # type: ignore[union-attr]
+            # Under v1 versioning, change request drafts inherit the salt when
+            # committed (see ChangeRequestCommitService); any other path
+            # recreating a live multivariate lineage re-buckets its identities,
+            # so leave a trace for operators instead of failing the write.
+            if (
+                self.change_request_id is None
+                and self.feature.type == MULTIVARIATE
+                and (superseded := self.get_superseded_live_feature_state())
+                is not None
+            ):
+                event_logger.warning(
+                    "feature_state.mv_variants_rebucketed",
+                    environment__id=self.environment_id,
+                    feature__id=self.feature_id,
+                    superseded_feature_state__id=superseded.id,
+                )
             return
 
         previous_version = (
