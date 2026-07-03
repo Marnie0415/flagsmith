@@ -17,6 +17,7 @@ from app_analytics.influxdb_wrapper import InfluxDBWrapper
 from environments.enums import EnvironmentDocumentCacheMode
 from organisations.models import Organisation
 from tests.integration.helpers import create_mv_option_with_api
+from users.models import FFAdminUser
 
 
 @pytest.fixture()
@@ -30,12 +31,12 @@ def django_client():  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture()
-def api_client():  # type: ignore[no-untyped-def]
+def api_client() -> APIClient:
     return APIClient()
 
 
 @pytest.fixture()
-def admin_client(api_client, admin_user):  # type: ignore[no-untyped-def]
+def admin_client(api_client: APIClient, admin_user: FFAdminUser) -> APIClient:
     api_client.force_authenticate(user=admin_user)
     return api_client
 
@@ -102,11 +103,6 @@ def dynamo_enabled_project(  # type: ignore[no-untyped-def]
 @pytest.fixture()
 def environment_api_key() -> str:
     return create_hash()
-
-
-@pytest.fixture()
-def environment_api_key_str(environment_api_key: str) -> str:
-    return environment_api_key
 
 
 @pytest.fixture()
