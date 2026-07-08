@@ -1,7 +1,7 @@
 """https://docs.flagsmith.com/integrating-with-flagsmith/flagsmith-api-overview/admin-api/updating-flags"""
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeAlias
 
 import pytest
 from rest_framework.test import APIClient
@@ -12,7 +12,7 @@ from features.multivariate.models import MultivariateFeatureOption
 from features.versioning.tasks import enable_v2_versioning
 from tests.integration.helpers import create_mv_option_with_api
 
-type FeatureUpdatePayload = dict[str, Any]
+FeatureUpdatePayload: TypeAlias = dict[str, Any]
 
 
 @pytest.fixture(params=["feature_versioning_v1", "feature_versioning_v2"], autouse=True)

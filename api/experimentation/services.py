@@ -605,7 +605,9 @@ def _update_live_feature_state(
     update_multivariate_values(feature_state, change_set.multivariate_values)
 
 
-def _update_rollout_in_place(experiment: Experiment, change_set: FlagChangeSetOptionA) -> None:
+def _update_rollout_in_place(
+    experiment: Experiment, change_set: FlagChangeSetOptionA
+) -> None:
     """Write the rollout-segment override, keeping variant assignment stable.
 
     Under v2 versioning, ``update_flag`` clones the override into a fresh feature

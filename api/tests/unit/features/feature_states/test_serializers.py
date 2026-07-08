@@ -10,6 +10,7 @@ from features.feature_states.serializers import (
     UpdateFlagOptionBSerializer,
     validate_multivariate_state_values,
 )
+from features.feature_states.types import MultivariateValuePayload
 from features.models import Feature
 from projects.models import Project
 from segments.models import Segment
@@ -268,7 +269,7 @@ def test_validate_multivariate_state_values__empty_list__is_noop(
     feature: Feature,
 ) -> None:
     # Given
-    multivariate_values: list[dict[str, typing.Any]] = []
+    multivariate_values: list[MultivariateValuePayload] = []
 
     # When / Then no exception is raised
     validate_multivariate_state_values(feature, multivariate_values)
