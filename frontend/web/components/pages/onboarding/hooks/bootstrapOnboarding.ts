@@ -18,6 +18,8 @@ import {
 } from 'common/types/responses'
 import { SmartDefaults } from './useSmartDefaults'
 import { createOrganisationViaAccountStore } from './createOrganisationViaAccountStore'
+import API from 'project/api'
+import Constants from 'common/constants'
 
 type Store = ReturnType<typeof getStore>
 
@@ -93,6 +95,10 @@ async function ensureProject(
       }),
     )
     .unwrap()
+  // Auto-created setup is a milestone reached, not a user action: fire First
+  // Project created, not the generic Project created (reserved for projects a
+  // user makes by hand). First is safe here - we only get here with no project.
+  API.trackEvent(Constants.events.CREATE_FIRST_PROJECT)
   await store
     .dispatch(
       environmentService.endpoints.createEnvironment.initiate({
@@ -170,7 +176,8 @@ async function ensureFlag(
   if (existing) {
     return existing
   }
-  return store
+  const isFirstFeature = !flags?.results?.length
+  const created = await store
     .dispatch(
       projectFlagService.endpoints.createProjectFlag.initiate({
         body: {
@@ -182,6 +189,11 @@ async function ensureFlag(
       }),
     )
     .unwrap()
+  // Milestone, not action (see the project create above): First only.
+  if (isFirstFeature) {
+    API.trackEvent(Constants.events.CREATE_FIRST_FEATURE)
+  }
+  return created
 }
 
 // Attach the "Onboarding" tag to the demo flag (find-or-create), so the flags
