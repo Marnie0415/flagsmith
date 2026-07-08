@@ -5092,6 +5092,7 @@
         }
       },
       "FeatureValue": {
+        "description": "A typed feature value, always transported as a string.",
         "type": "object",
         "properties": {
           "type": {
@@ -5624,6 +5625,7 @@
         ]
       },
       "MultivariateValue": {
+        "description": "A weight for an existing multivariate option.",
         "type": "object",
         "properties": {
           "multivariate_feature_option": {

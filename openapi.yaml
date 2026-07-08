@@ -99,13 +99,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateFlag'
+              $ref: '#/components/schemas/UpdateFlagOptionA'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/UpdateFlag'
+              $ref: '#/components/schemas/UpdateFlagOptionA'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/UpdateFlag'
+              $ref: '#/components/schemas/UpdateFlagOptionA'
       responses:
         '204':
           description: No response body
@@ -162,13 +162,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateFlagV2'
+              $ref: '#/components/schemas/UpdateFlagOptionB'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/UpdateFlagV2'
+              $ref: '#/components/schemas/UpdateFlagOptionB'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/UpdateFlagV2'
+              $ref: '#/components/schemas/UpdateFlagOptionB'
       responses:
         '204':
           description: No response body
@@ -19222,6 +19222,7 @@ components:
       required:
         - key
     DeleteSegmentOverride:
+      description: Removes a feature's override for a segment.
       type: object
       properties:
         feature:
@@ -19467,15 +19468,17 @@ components:
       required:
         - name
     EnvironmentDefault:
+      description: The environment-default part of an Option B update.
       type: object
       properties:
         enabled:
           type: boolean
         value:
           $ref: '#/components/schemas/FeatureValue'
-      required:
-        - enabled
-        - value
+        multivariate_options:
+          type: array
+          items:
+            $ref: '#/components/schemas/MultivariateOption'
     EnvironmentFeatureVersion:
       type: object
       properties:
@@ -20473,6 +20476,7 @@ components:
         - name
         - project
     FeatureIdentifier:
+      description: Resolves a feature from exactly one of `name` or `id`.
       type: object
       properties:
         name:
@@ -20856,6 +20860,7 @@ components:
             - boolean
             - 'null'
     FeatureUpdateSegmentData:
+      description: 'Targets a segment override, optionally re-prioritising it.'
       type: object
       properties:
         id:
@@ -20867,6 +20872,7 @@ components:
       required:
         - id
     FeatureValue:
+      description: 'A typed feature value, always transported as a string.'
       type: object
       properties:
         type:
@@ -21951,6 +21957,21 @@ components:
       required:
         - multivariate_feature_option
         - percentage_allocation
+    MultivariateOption:
+      description: 'An environment-level variant: absent `id` creates it; `value` (re)sets it.'
+      type: object
+      properties:
+        id:
+          type: integer
+        percentage_allocation:
+          type: number
+          format: double
+          maximum: 100
+          minimum: 0
+        value:
+          $ref: '#/components/schemas/FeatureValue'
+      required:
+        - percentage_allocation
     MultivariateOptionValues:
       type: object
       properties:
@@ -21965,6 +21986,7 @@ components:
             - type: 'null'
           readOnly: true
     MultivariateValue:
+      description: A weight for an existing multivariate option.
       type: object
       properties:
         multivariate_feature_option:
@@ -26182,6 +26204,7 @@ components:
       required:
         - api_key
     SegmentIdentifier:
+      description: Identifies a segment by `id`.
       type: object
       properties:
         id:
@@ -26229,6 +26252,7 @@ components:
           format: date-time
           readOnly: true
     SegmentOverride:
+      description: One segment override in an Option B update.
       type: object
       properties:
         segment_id:
@@ -26245,10 +26269,26 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MultivariateValue'
+        multivariate_options:
+          type: array
+          items:
+            $ref: '#/components/schemas/SegmentOverrideMultivariateOption'
       required:
-        - enabled
         - segment_id
-        - value
+    SegmentOverrideMultivariateOption:
+      description: A re-weight of an option that already exists on the feature.
+      type: object
+      properties:
+        id:
+          type: integer
+        percentage_allocation:
+          type: number
+          format: double
+          maximum: 100
+          minimum: 0
+      required:
+        - id
+        - percentage_allocation
     SegmentRule:
       description: Adds nested create feature
       type: object
@@ -27009,7 +27049,8 @@ components:
           allOf:
             - $ref: '#/components/schemas/LifecycleStageEnum'
           readOnly: true
-    UpdateFlag:
+    UpdateFlagOptionA:
+      description: Updates the environment default or one segment override per request.
       type: object
       properties:
         feature:
@@ -27020,11 +27061,14 @@ components:
           type: boolean
         value:
           $ref: '#/components/schemas/FeatureValue'
+        multivariate_options:
+          type: array
+          items:
+            $ref: '#/components/schemas/MultivariateOption'
       required:
-        - enabled
         - feature
-        - value
-    UpdateFlagV2:
+    UpdateFlagOptionB:
+      description: Updates the environment default and segment overrides in one request.
       type: object
       properties:
         feature:
@@ -27036,7 +27080,6 @@ components:
           items:
             $ref: '#/components/schemas/SegmentOverride'
       required:
-        - environment_default
         - feature
     UpdateSubscription:
       type: object
