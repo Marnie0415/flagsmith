@@ -12,6 +12,7 @@ import { AccountModel, User } from 'common/types/responses'
 import AccountStore from 'common/stores/account-store'
 import flagsmith from '@flagsmith/flagsmith'
 import Utils from 'common/utils/utils'
+import { getOnboardingVariant } from 'common/utils/getOnboardingVariant'
 import loadChat, { identifyChatUser } from 'common/loadChat'
 
 const API = {
@@ -247,7 +248,12 @@ const API = {
         role: selectedRole,
         tasks: user.onboarding?.tasks?.map((t) => t.name) || [],
       })
-      API.flagsmithIdentify()
+      // Pin the onboarding variant as a user property once the flag has
+      // resolved, so every event (incl. autocapture pageviews) is attributable
+      // to control vs single_page in one funnel (#7738).
+      API.flagsmithIdentify()?.then(() =>
+        API.trackTraits({ onboarding_variant: getOnboardingVariant() }),
+      )
     } catch (err) {
       console.error('Error identifying', err)
     }
