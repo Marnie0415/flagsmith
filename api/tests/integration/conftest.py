@@ -106,6 +106,11 @@ def environment_api_key() -> str:
 
 
 @pytest.fixture()
+def environment_api_key_str(environment_api_key: str) -> str:
+    return environment_api_key
+
+
+@pytest.fixture()
 def environment_name() -> str:
     return "Test Environment"
 
