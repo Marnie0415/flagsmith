@@ -1,7 +1,6 @@
 import typing
 
 import pytest
-from rest_framework import serializers
 
 from environments.models import Environment
 from features.feature_states.serializers import (
@@ -16,7 +15,7 @@ from projects.models import Project
 from segments.models import Segment
 
 
-def test_get_feature__no_environment_in_context__raises_validation_error(
+def test_update_flag_serializer__no_environment_in_context__returns_invalid(
     feature: Feature,
 ) -> None:
     # Given
@@ -28,14 +27,13 @@ def test_get_feature__no_environment_in_context__raises_validation_error(
         },
         context={},  # No environment
     )
-    serializer.is_valid()
 
     # When
-    with pytest.raises(serializers.ValidationError) as exc_info:
-        serializer.get_feature()
+    is_valid = serializer.is_valid()
 
     # Then
-    assert "Environment context is required" in str(exc_info.value)
+    assert is_valid is False
+    assert "Environment context is required" in str(serializer.errors)
 
 
 def test_validate_segment_overrides__empty_list__returns_empty_list() -> None:

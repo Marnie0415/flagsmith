@@ -57,10 +57,10 @@ from experimentation.stats import (
 )
 from features.models import FeatureState
 from features.value_types import BOOLEAN, INTEGER, STRING
-from features.versioning.dataclasses import FlagChangeSetOptionA
+from features.versioning.dataclasses import FeatureValue, FlagChangeSetOptionA
 from features.versioning.versioning_service import (
+    apply_feature_state_changes,
     update_flag,
-    update_multivariate_values,
 )
 from integrations.flagsmith.client import get_openfeature_client
 from segments.models import Condition, Segment, SegmentRule
@@ -593,18 +593,6 @@ def _get_live_rollout_override(experiment: Experiment) -> FeatureState | None:
     )
 
 
-def _update_live_feature_state(
-    feature_state: FeatureState, change_set: FlagChangeSetOptionA
-) -> None:
-    feature_state.enabled = change_set.enabled
-    feature_state.save()
-    feature_state.feature_state_value.set_value(
-        change_set.feature_state_value, change_set.type_
-    )
-    feature_state.feature_state_value.save()
-    update_multivariate_values(feature_state, change_set.multivariate_values)
-
-
 def _update_rollout_in_place(
     experiment: Experiment, change_set: FlagChangeSetOptionA
 ) -> None:
@@ -624,7 +612,12 @@ def _update_rollout_in_place(
     if experiment.environment.use_v2_feature_versioning and (
         override := _get_live_rollout_override(experiment)
     ):
-        _update_live_feature_state(override, change_set)
+        apply_feature_state_changes(
+            override,
+            enabled=change_set.enabled,
+            value=change_set.value,
+            multivariate_values=change_set.multivariate_values,
+        )
         return
     update_flag(experiment.environment, experiment.feature, change_set)
 
@@ -643,8 +636,7 @@ def apply_experiment_rollout(experiment: Experiment, spec: RolloutSpec) -> None:
             FlagChangeSetOptionA(
                 author=spec.author,
                 enabled=spec.enabled,
-                feature_state_value=spec.feature_state_value,
-                type_=spec.value_type,
+                value=FeatureValue(spec.feature_state_value, spec.value_type),
                 segment_id=segment.id,
                 multivariate_values=spec.multivariate_values,
             ),
@@ -704,8 +696,7 @@ def enable_experiment_rollout(experiment: Experiment, author: AuthorData) -> Non
         FlagChangeSetOptionA(
             author=author,
             enabled=True,
-            feature_state_value=value["value"],
-            type_=value["type"],
+            value=FeatureValue(value["value"], value["type"]),
             segment_id=experiment.rollout_segment_id,
         ),
     )

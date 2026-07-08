@@ -349,3 +349,178 @@ def test_update_flag__multivariate_percentage_allocation_exceeds_100__responds_4
     assert response.status_code == 400
     assert "multivariate_options" in response.json()
     assert not MultivariateFeatureOption.objects.filter(feature_id=feature).exists()
+
+
+@pytest.mark.parametrize(
+    "endpoint,payload,expected_error",
+    [
+        pytest.param(
+            "update-flag-v1",
+            lambda feature, segment: {
+                "feature": {"id": feature},
+                "multivariate_options": [{"percentage_allocation": 50}],
+            },
+            "requires a 'value'",
+            id="option_a-environment-new-option-without-value",
+        ),
+        pytest.param(
+            "update-flag-v2",
+            lambda feature, segment: {
+                "feature": {"id": feature},
+                "environment_default": {
+                    "multivariate_options": [{"percentage_allocation": 50}],
+                },
+            },
+            "requires a 'value'",
+            id="option_b-environment-new-option-without-value",
+        ),
+        pytest.param(
+            "update-flag-v1",
+            lambda feature, segment: {
+                "feature": {"id": feature},
+                "multivariate_options": [{"id": 999999, "percentage_allocation": 50}],
+            },
+            "do not belong to the feature",
+            id="option_a-environment-unknown-option",
+        ),
+        pytest.param(
+            "update-flag-v2",
+            lambda feature, segment: {
+                "feature": {"id": feature},
+                "environment_default": {
+                    "multivariate_options": [
+                        {"id": 999999, "percentage_allocation": 50}
+                    ],
+                },
+            },
+            "do not belong to the feature",
+            id="option_b-environment-unknown-option",
+        ),
+        pytest.param(
+            "update-flag-v1",
+            lambda feature, segment: {
+                "feature": {"id": feature},
+                "multivariate_options": [
+                    {"id": 999999, "percentage_allocation": 20},
+                    {"id": 999999, "percentage_allocation": 30},
+                ],
+            },
+            "must be unique",
+            id="option_a-environment-duplicate-option",
+        ),
+        pytest.param(
+            "update-flag-v2",
+            lambda feature, segment: {
+                "feature": {"id": feature},
+                "environment_default": {
+                    "multivariate_options": [
+                        {"id": 999999, "percentage_allocation": 20},
+                        {"id": 999999, "percentage_allocation": 30},
+                    ],
+                },
+            },
+            "must be unique",
+            id="option_b-environment-duplicate-option",
+        ),
+        pytest.param(
+            "update-flag-v1",
+            lambda feature, segment: {
+                "feature": {"id": feature},
+                "segment": {"id": segment},
+                "multivariate_options": [
+                    {
+                        "percentage_allocation": 50,
+                        "value": {"type": "string", "value": "variant"},
+                    }
+                ],
+            },
+            "require an option 'id'",
+            id="option_a-segment-option-without-id",
+        ),
+        pytest.param(
+            "update-flag-v1",
+            lambda feature, segment: {
+                "feature": {"id": feature},
+                "segment": {"id": segment},
+                "multivariate_options": [{"id": 999999, "percentage_allocation": 50}],
+            },
+            "do not belong to the feature",
+            id="option_a-segment-unknown-option",
+        ),
+        pytest.param(
+            "update-flag-v2",
+            lambda feature, segment: {
+                "feature": {"id": feature},
+                "segment_overrides": [
+                    {
+                        "segment_id": segment,
+                        "multivariate_options": [
+                            {"id": 999999, "percentage_allocation": 50}
+                        ],
+                    },
+                ],
+            },
+            "do not belong to the feature",
+            id="option_b-segment-unknown-option",
+        ),
+        pytest.param(
+            "update-flag-v1",
+            lambda feature, segment: {
+                "feature": {"id": feature},
+                "segment": {"id": segment},
+                "multivariate_options": [
+                    {"id": 999999, "percentage_allocation": 20},
+                    {"id": 999999, "percentage_allocation": 30},
+                ],
+            },
+            "must be unique",
+            id="option_a-segment-duplicate-option",
+        ),
+        pytest.param(
+            "update-flag-v2",
+            lambda feature, segment: {
+                "feature": {"id": feature},
+                "segment_overrides": [
+                    {
+                        "segment_id": segment,
+                        "multivariate_options": [
+                            {"id": 999999, "percentage_allocation": 20},
+                            {"id": 999999, "percentage_allocation": 30},
+                        ],
+                    },
+                ],
+            },
+            "must be unique",
+            id="option_b-segment-duplicate-option",
+        ),
+        pytest.param(
+            "update-flag-v1",
+            lambda feature, segment: {
+                "feature": {"name": "missing-feature"},
+                "multivariate_options": [{"id": 999999, "percentage_allocation": 50}],
+            },
+            "not found in project",
+            id="option_a-unknown-feature",
+        ),
+    ],
+)
+def test_update_flag__invalid_multivariate_options__responds_400(
+    admin_client: APIClient,
+    environment_api_key: str,
+    feature: int,
+    segment: int,
+    versioned_environment: Environment,
+    endpoint: str,
+    payload: Callable[[int, int], FeatureUpdatePayload],
+    expected_error: str,
+) -> None:
+    # Given / When
+    response = admin_client.post(
+        f"/api/experiments/environments/{environment_api_key}/{endpoint}/",
+        payload(feature, segment),
+        format="json",
+    )
+
+    # Then
+    assert response.status_code == 400
+    assert expected_error in str(response.json())

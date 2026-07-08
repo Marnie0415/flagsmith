@@ -1,18 +1,23 @@
 import typing
 
 from common.core.utils import using_database_replica
+from django.db import transaction
 from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
 
 from core.dataclasses import AuthorData
 from environments.models import Environment
-from features.feature_states.models import FeatureValueType
 from features.models import Feature, FeatureSegment, FeatureState, FeatureStateValue
-from features.multivariate.models import MultivariateFeatureStateValue
+from features.multivariate.models import (
+    MultivariateFeatureOption,
+    MultivariateFeatureStateValue,
+)
 from features.versioning.dataclasses import (
+    FeatureValue,
     FlagChangeSetOptionA,
     FlagChangeSetOptionB,
+    MultivariateOptionChangeSet,
     MultivariateValueChangeSet,
 )
 from features.versioning.exceptions import DirectFeatureStateWriteNotAllowedError
@@ -22,12 +27,14 @@ from features.versioning.models import EnvironmentFeatureVersion
 def require_direct_state_write(
     environment: Environment, *, is_identity_override: bool
 ) -> None:
+    """Forbid direct feature-state writes where v2 versioning owns the history."""
     if is_identity_override or not environment.use_v2_feature_versioning:
         return
     raise DirectFeatureStateWriteNotAllowedError()
 
 
 def require_direct_state_write_for_state(feature_state: FeatureState) -> None:
+    """Forbid direct writes to a feature state owned by published v2 history."""
     # FS rows attached to an unpublished EFV are a draft, so direct mutation is
     # part of the versioning flow rather than a bypass of it.
     efv = feature_state.environment_feature_version
@@ -92,6 +99,7 @@ def get_environment_flags_dict(
     key_function: typing.Callable[[FeatureState], tuple] = None,  # type: ignore[type-arg,assignment]
     from_replica: bool = False,
 ) -> dict[tuple | str | int, FeatureState]:  # type: ignore[type-arg]
+    """Return the latest live feature states, keyed by the given key function."""
     key_function = key_function or _get_distinct_key  # type: ignore[truthy-function]
 
     feature_states = _get_feature_states_queryset(
@@ -119,6 +127,7 @@ def get_environment_flags_dict(
 def get_current_live_environment_feature_version(
     environment_id: int, feature_id: int
 ) -> EnvironmentFeatureVersion | None:
+    """Return the feature's latest published, live version in the environment."""
     return (  # type: ignore[no-any-return]
         EnvironmentFeatureVersion.objects.filter(
             environment_id=environment_id,
@@ -134,9 +143,10 @@ def get_current_live_environment_feature_version(
 def update_flag(
     environment: Environment, feature: Feature, change_set: FlagChangeSetOptionA
 ) -> FeatureState:
-    if environment.use_v2_feature_versioning:
-        return _update_flag_for_versioning_v2(environment, feature, change_set)
-    else:
+    """Apply a change to the environment default or one segment override."""
+    with transaction.atomic():
+        if environment.use_v2_feature_versioning:
+            return _update_flag_for_versioning_v2(environment, feature, change_set)
         return _update_flag_for_versioning_v1(environment, feature, change_set)
 
 
@@ -171,7 +181,7 @@ def _update_flag_for_versioning_v2(
                 environment=environment,
                 feature_segment=feature_segment,
                 environment_feature_version=new_version,
-                enabled=change_set.enabled,
+                enabled=bool(change_set.enabled),
             )
     else:
         # Environment default - always exists
@@ -180,15 +190,7 @@ def _update_flag_for_versioning_v2(
             identity_id=None,
         )
 
-    target_feature_state.enabled = change_set.enabled
-    target_feature_state.save()
-
-    _update_feature_state_value(
-        target_feature_state.feature_state_value,
-        change_set.feature_state_value,
-        change_set.type_,
-    )
-    update_multivariate_values(target_feature_state, change_set.multivariate_values)
+    _apply_flag_change_set(feature, target_feature_state, change_set)
 
     if change_set.segment_id is not None and change_set.segment_priority is not None:
         _update_segment_priority(target_feature_state, change_set.segment_priority)
@@ -228,20 +230,13 @@ def _update_flag_for_versioning_v1(
             feature=feature,
             environment=environment,
             feature_segment=feature_segment,
-            enabled=change_set.enabled,
+            enabled=bool(change_set.enabled),
         )
     else:
         assert len(latest_feature_states) == 1
         target_feature_state = list(latest_feature_states.values())[0]
-        target_feature_state.enabled = change_set.enabled
-        target_feature_state.save()
 
-    _update_feature_state_value(
-        target_feature_state.feature_state_value,
-        change_set.feature_state_value,
-        change_set.type_,
-    )
-    update_multivariate_values(target_feature_state, change_set.multivariate_values)
+    _apply_flag_change_set(feature, target_feature_state, change_set)
 
     if change_set.segment_id is not None and change_set.segment_priority is not None:
         _update_segment_priority(target_feature_state, change_set.segment_priority)
@@ -249,10 +244,8 @@ def _update_flag_for_versioning_v1(
     return target_feature_state
 
 
-def _update_feature_state_value(
-    fsv: FeatureStateValue, value: str, type_: FeatureValueType
-) -> None:
-    fsv.set_value(value, type_)
+def _update_feature_state_value(fsv: FeatureStateValue, value: FeatureValue) -> None:
+    fsv.set_value(value.value, value.type_)
     fsv.save()
 
 
@@ -260,6 +253,7 @@ def update_multivariate_values(
     feature_state: FeatureState,
     values: list[MultivariateValueChangeSet] | None,
 ) -> None:
+    """Create or re-weight the state's allocations; omitted options are kept."""
     if values is None:
         return
 
@@ -293,11 +287,100 @@ def update_multivariate_values(
             mv.save()
 
 
+def apply_feature_state_changes(
+    feature_state: FeatureState,
+    *,
+    enabled: bool | None,
+    value: FeatureValue | None,
+    multivariate_values: list[MultivariateValueChangeSet] | None,
+) -> None:
+    """Apply only the provided parts of a change; omissions are left intact."""
+    if enabled is not None:
+        feature_state.enabled = enabled
+        feature_state.save()
+    if value is not None:
+        _update_feature_state_value(feature_state.feature_state_value, value)
+    update_multivariate_values(feature_state, multivariate_values)
+
+
+def _reconcile_environment_multivariate_options(
+    feature: Feature,
+    environment_default_state: FeatureState,
+    options: list[MultivariateOptionChangeSet],
+) -> None:
+    """Create, update, or delete environment-level MVs from `options` as SoT"""
+    kept_ids = {option.id for option in options if option.id is not None}
+    for obsolete in feature.multivariate_options.exclude(id__in=kept_ids):
+        obsolete.delete()
+
+    allocations = []
+    for option in options:
+        if option.id is None:
+            assert option.value is not None
+            mv_option = MultivariateFeatureOption(
+                feature=feature,
+                default_percentage_allocation=option.percentage_allocation,
+            )
+            mv_option.set_value(option.value.value, option.value.type_)
+            mv_option.save()
+            option_id = mv_option.id
+        else:
+            option_id = option.id
+            if option.value is not None:
+                mv_option = feature.multivariate_options.get(id=option_id)
+                mv_option.set_value(option.value.value, option.value.type_)
+                mv_option.save()
+        allocations.append(
+            MultivariateValueChangeSet(
+                multivariate_feature_option_id=option_id,
+                percentage_allocation=option.percentage_allocation,
+            )
+        )
+
+    update_multivariate_values(environment_default_state, allocations)
+
+
+def _apply_flag_change_set(
+    feature: Feature,
+    feature_state: FeatureState,
+    change_set: FlagChangeSetOptionA,
+) -> None:
+    apply_feature_state_changes(
+        feature_state,
+        enabled=change_set.enabled,
+        value=change_set.value,
+        multivariate_values=change_set.multivariate_values,
+    )
+    if change_set.multivariate_options is not None:
+        _reconcile_environment_multivariate_options(
+            feature, feature_state, change_set.multivariate_options
+        )
+
+
+def _apply_environment_default(
+    feature: Feature,
+    feature_state: FeatureState,
+    change_set: FlagChangeSetOptionB,
+) -> None:
+    apply_feature_state_changes(
+        feature_state,
+        enabled=change_set.environment_default_enabled,
+        value=change_set.environment_default_value,
+        multivariate_values=None,
+    )
+    if change_set.environment_default_multivariate_options is not None:
+        _reconcile_environment_multivariate_options(
+            feature,
+            feature_state,
+            change_set.environment_default_multivariate_options,
+        )
+
+
 def _create_segment_override(
     feature: Feature,
     environment: Environment,
     segment_id: int,
-    enabled: bool,
+    enabled: bool | None,
     priority: int | None,
     version: EnvironmentFeatureVersion | None = None,
 ) -> FeatureState:
@@ -318,7 +401,7 @@ def _create_segment_override(
         environment=environment,
         feature_segment=feature_segment,
         environment_feature_version=version,
-        enabled=enabled,
+        enabled=bool(enabled),
     )
 
     return segment_state
@@ -333,10 +416,12 @@ def _update_segment_priority(feature_state: FeatureState, priority: int) -> None
 def update_flag_option_b(
     environment: Environment, feature: Feature, change_set: FlagChangeSetOptionB
 ) -> None:
-    if environment.use_v2_feature_versioning:
-        _update_flag_option_b_for_versioning_v2(environment, feature, change_set)
-    else:
-        _update_flag_option_b_for_versioning_v1(environment, feature, change_set)
+    """Apply a change to the environment default and its segment overrides."""
+    with transaction.atomic():
+        if environment.use_v2_feature_versioning:
+            _update_flag_option_b_for_versioning_v2(environment, feature, change_set)
+        else:
+            _update_flag_option_b_for_versioning_v1(environment, feature, change_set)
 
 
 def _update_flag_option_b_for_versioning_v2(
@@ -352,30 +437,13 @@ def _update_flag_option_b_for_versioning_v2(
     env_default_state = new_version.feature_states.get(
         feature_segment__isnull=True, identity_id=None
     )
-    env_default_state.enabled = change_set.environment_default_enabled
-    env_default_state.save()
-
-    _update_feature_state_value(
-        env_default_state.feature_state_value,
-        change_set.environment_default_value,
-        change_set.environment_default_type,
-    )
+    _apply_environment_default(feature, env_default_state, change_set)
 
     for override in change_set.segment_overrides:
         try:
             segment_state = new_version.feature_states.get(
                 feature_segment__segment_id=override.segment_id
             )
-            segment_state.enabled = override.enabled
-            segment_state.save()
-
-            _update_feature_state_value(
-                segment_state.feature_state_value,
-                override.feature_state_value,
-                override.type_,
-            )
-            update_multivariate_values(segment_state, override.multivariate_values)
-
             if override.priority is not None:
                 _update_segment_priority(segment_state, override.priority)
         except FeatureState.DoesNotExist:
@@ -387,13 +455,12 @@ def _update_flag_option_b_for_versioning_v2(
                 priority=override.priority,
                 version=new_version,
             )
-
-            _update_feature_state_value(
-                segment_state.feature_state_value,
-                override.feature_state_value,
-                override.type_,
-            )
-            update_multivariate_values(segment_state, override.multivariate_values)
+        apply_feature_state_changes(
+            segment_state,
+            enabled=override.enabled,
+            value=override.value,
+            multivariate_values=override.multivariate_values,
+        )
 
     new_version.publish(
         published_by=change_set.author.user,
@@ -412,14 +479,7 @@ def _update_flag_option_b_for_versioning_v1(
     assert len(env_default_states) == 1
 
     env_default_state = list(env_default_states.values())[0]
-    env_default_state.enabled = change_set.environment_default_enabled
-    env_default_state.save()
-
-    _update_feature_state_value(
-        env_default_state.feature_state_value,
-        change_set.environment_default_value,
-        change_set.environment_default_type,
-    )
+    _apply_environment_default(feature, env_default_state, change_set)
 
     for override in change_set.segment_overrides:
         # TODO: optimise this once this is out of the
@@ -439,28 +499,18 @@ def _update_flag_option_b_for_versioning_v1(
                 priority=override.priority,
                 version=None,  # V1 versioning doesn't use versions
             )
-
-            _update_feature_state_value(
-                segment_state.feature_state_value,
-                override.feature_state_value,
-                override.type_,
-            )
-            update_multivariate_values(segment_state, override.multivariate_values)
         else:
             assert len(segment_states) == 1
             segment_state = list(segment_states.values())[0]
-            segment_state.enabled = override.enabled
-            segment_state.save()
-
-            _update_feature_state_value(
-                segment_state.feature_state_value,
-                override.feature_state_value,
-                override.type_,
-            )
-            update_multivariate_values(segment_state, override.multivariate_values)
-
             if override.priority is not None:
                 _update_segment_priority(segment_state, override.priority)
+
+        apply_feature_state_changes(
+            segment_state,
+            enabled=override.enabled,
+            value=override.value,
+            multivariate_values=override.multivariate_values,
+        )
 
 
 def delete_segment_override(
@@ -469,6 +519,7 @@ def delete_segment_override(
     segment_id: int,
     author: AuthorData,
 ) -> None:
+    """Remove a feature's segment override, versioning the removal under v2."""
     if environment.use_v2_feature_versioning:
         _delete_segment_override_v2(environment, feature, segment_id, author)
     else:
