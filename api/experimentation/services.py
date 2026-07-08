@@ -57,7 +57,7 @@ from experimentation.stats import (
 )
 from features.models import FeatureState
 from features.value_types import BOOLEAN, INTEGER, STRING
-from features.versioning.dataclasses import FlagChangeSet
+from features.versioning.dataclasses import FlagChangeSetOptionA
 from features.versioning.versioning_service import (
     update_flag,
     update_multivariate_values,
@@ -594,7 +594,7 @@ def _get_live_rollout_override(experiment: Experiment) -> FeatureState | None:
 
 
 def _update_live_feature_state(
-    feature_state: FeatureState, change_set: FlagChangeSet
+    feature_state: FeatureState, change_set: FlagChangeSetOptionA
 ) -> None:
     feature_state.enabled = change_set.enabled
     feature_state.save()
@@ -605,7 +605,7 @@ def _update_live_feature_state(
     update_multivariate_values(feature_state, change_set.multivariate_values)
 
 
-def _update_rollout_in_place(experiment: Experiment, change_set: FlagChangeSet) -> None:
+def _update_rollout_in_place(experiment: Experiment, change_set: FlagChangeSetOptionA) -> None:
     """Write the rollout-segment override, keeping variant assignment stable.
 
     Under v2 versioning, ``update_flag`` clones the override into a fresh feature
@@ -638,7 +638,7 @@ def apply_experiment_rollout(experiment: Experiment, spec: RolloutSpec) -> None:
         segment = _sync_rollout_segment(experiment, spec.rollout_percentage)
         _update_rollout_in_place(
             experiment,
-            FlagChangeSet(
+            FlagChangeSetOptionA(
                 author=spec.author,
                 enabled=spec.enabled,
                 feature_state_value=spec.feature_state_value,
@@ -699,7 +699,7 @@ def enable_experiment_rollout(experiment: Experiment, author: AuthorData) -> Non
     value = rollout["feature_state_value"]
     _update_rollout_in_place(
         experiment,
-        FlagChangeSet(
+        FlagChangeSetOptionA(
             author=author,
             enabled=True,
             feature_state_value=value["value"],

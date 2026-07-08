@@ -21,7 +21,7 @@ class Conflict(BaseModel):
 
 
 @dataclass
-class FlagChangeSet:
+class FlagChangeSetOptionA:
     author: AuthorData
     enabled: bool
     feature_state_value: str
@@ -49,7 +49,7 @@ class SegmentOverrideChangeSet:
 
 
 @dataclass
-class FlagChangeSetV2:
+class FlagChangeSetOptionB:
     author: AuthorData
     environment_default_enabled: bool
     environment_default_value: str

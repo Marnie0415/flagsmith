@@ -1,25 +1,36 @@
-from typing import Any
+from typing import Any, TypeVar
 
 from rest_framework import serializers
 
 from core.dataclasses import AuthorData
 from environments.models import Environment
+from features.feature_states.types import (
+    EnvironmentDefaultPayload,
+    FeatureIdentifierPayload,
+    FeatureValuePayload,
+    MultivariateValuePayload,
+    SegmentIdentifierPayload,
+    SegmentOverridePayload,
+    SegmentPayload,
+)
 from features.models import Feature, FeatureState
 from features.versioning.dataclasses import (
-    FlagChangeSet,
-    FlagChangeSetV2,
+    FlagChangeSetOptionA,
+    FlagChangeSetOptionB,
     MultivariateValueChangeSet,
     SegmentOverrideChangeSet,
 )
 from features.versioning.versioning_service import (
     delete_segment_override,
     update_flag,
-    update_flag_v2,
+    update_flag_option_b,
 )
 from segments.models import Segment
 
+_InstanceT = TypeVar("_InstanceT")
 
-class BaseFeatureUpdateSerializer(serializers.Serializer):  # type: ignore[type-arg]
+
+class BaseFeatureUpdateSerializer(serializers.Serializer[_InstanceT]):
     @property
     def environment(self) -> Environment:
         environment: Environment | None = self.context.get("environment")
@@ -48,36 +59,36 @@ class BaseFeatureUpdateSerializer(serializers.Serializer):  # type: ignore[type-
             )
 
 
-class FeatureIdentifierSerializer(serializers.Serializer):  # type: ignore[type-arg]
+class FeatureIdentifierSerializer(serializers.Serializer[FeatureIdentifierPayload]):
     name = serializers.CharField(required=False, allow_blank=False)
     id = serializers.IntegerField(required=False)
 
-    def validate(self, data: dict) -> dict:  # type: ignore[type-arg]
-        has_name = "name" in data
-        has_id = "id" in data
+    def validate(self, attrs: FeatureIdentifierPayload) -> FeatureIdentifierPayload:
+        has_name = "name" in attrs
+        has_id = "id" in attrs
         if not has_name and not has_id:
             raise serializers.ValidationError(
                 "Either 'name' or 'id' is required for feature identification"
             )
         if has_name and has_id:
             raise serializers.ValidationError("Provide either 'name' or 'id', not both")
-        return data
+        return attrs
 
 
-class FeatureUpdateSegmentDataSerializer(serializers.Serializer):  # type: ignore[type-arg]
+class FeatureUpdateSegmentDataSerializer(serializers.Serializer[SegmentPayload]):
     id = serializers.IntegerField(required=True)
     priority = serializers.IntegerField(required=False, allow_null=True)
 
 
-class FeatureValueSerializer(serializers.Serializer):  # type: ignore[type-arg]
+class FeatureValueSerializer(serializers.Serializer[FeatureValuePayload]):
     type = serializers.ChoiceField(
         choices=["integer", "string", "boolean"], required=True
     )
     value = serializers.CharField(required=True, allow_blank=True)
 
-    def validate(self, data: dict) -> dict:  # type: ignore[type-arg]
-        value_type = data["type"]
-        string_val = data["value"]
+    def validate(self, attrs: FeatureValuePayload) -> FeatureValuePayload:
+        value_type = attrs["type"]
+        string_val = attrs["value"]
 
         if value_type == "integer":
             try:
@@ -92,27 +103,27 @@ class FeatureValueSerializer(serializers.Serializer):  # type: ignore[type-arg]
                     f"'{string_val}' is not a valid boolean (use 'true' or 'false')"
                 )
 
-        return data
+        return attrs
 
 
-class UpdateFlagSerializer(BaseFeatureUpdateSerializer):
+class UpdateFlagOptionASerializer(BaseFeatureUpdateSerializer[FeatureState]):
     feature = FeatureIdentifierSerializer(required=True)
     segment = FeatureUpdateSegmentDataSerializer(required=False)
     enabled = serializers.BooleanField(required=True)
     value = FeatureValueSerializer(required=True)
 
-    def validate_segment(self, value: dict) -> dict:  # type: ignore[type-arg]
+    def validate_segment(self, value: SegmentPayload) -> SegmentPayload:
         if value and "id" in value:
             self.validate_segment_id(value["id"])
         return value
 
     @property
-    def flag_change_set(self) -> FlagChangeSet:
+    def flag_change_set(self) -> FlagChangeSetOptionA:
         validated_data = self.validated_data
         value_data = validated_data["value"]
         segment_data = validated_data.get("segment")
 
-        return FlagChangeSet(
+        return FlagChangeSetOptionA(
             author=AuthorData.from_request(self.context["request"]),
             enabled=validated_data["enabled"],
             feature_state_value=value_data["value"],
@@ -126,12 +137,12 @@ class UpdateFlagSerializer(BaseFeatureUpdateSerializer):
         return update_flag(self.environment, feature, self.flag_change_set)
 
 
-class EnvironmentDefaultSerializer(serializers.Serializer):  # type: ignore[type-arg]
+class EnvironmentDefaultSerializer(serializers.Serializer[EnvironmentDefaultPayload]):
     enabled = serializers.BooleanField(required=True)
     value = FeatureValueSerializer(required=True)
 
 
-class MultivariateValueSerializer(serializers.Serializer):  # type: ignore[type-arg]
+class MultivariateValueSerializer(serializers.Serializer[MultivariateValuePayload]):
     multivariate_feature_option = serializers.IntegerField(required=True)
     percentage_allocation = serializers.FloatField(
         required=True, min_value=0, max_value=100
@@ -139,7 +150,7 @@ class MultivariateValueSerializer(serializers.Serializer):  # type: ignore[type-
 
 
 def validate_multivariate_state_values(
-    feature: Feature, multivariate_values: list[dict[str, Any]]
+    feature: Feature, multivariate_values: list[MultivariateValuePayload]
 ) -> None:
     if not multivariate_values:
         return
@@ -153,7 +164,7 @@ def validate_multivariate_state_values(
         )
 
 
-class SegmentOverrideSerializer(serializers.Serializer):  # type: ignore[type-arg]
+class SegmentOverrideSerializer(serializers.Serializer[SegmentOverridePayload]):
     segment_id = serializers.IntegerField(required=True)
     priority = serializers.IntegerField(required=False, allow_null=True)
     enabled = serializers.BooleanField(required=True)
@@ -163,15 +174,14 @@ class SegmentOverrideSerializer(serializers.Serializer):  # type: ignore[type-ar
     )
 
 
-class UpdateFlagV2Serializer(BaseFeatureUpdateSerializer):
+class UpdateFlagOptionBSerializer(BaseFeatureUpdateSerializer[FlagChangeSetOptionB]):
     feature = FeatureIdentifierSerializer(required=True)
     environment_default = EnvironmentDefaultSerializer(required=True)
     segment_overrides = SegmentOverrideSerializer(many=True, required=False)
 
     def validate_segment_overrides(
-        self,
-        value: list[dict],  # type: ignore[type-arg]
-    ) -> list[dict]:  # type: ignore[type-arg]
+        self, value: list[SegmentOverridePayload]
+    ) -> list[SegmentOverridePayload]:
         if not value:
             return value
 
@@ -187,22 +197,20 @@ class UpdateFlagV2Serializer(BaseFeatureUpdateSerializer):
 
         return value
 
-    def validate(self, data: dict) -> dict:  # type: ignore[type-arg]
-        overrides = data.get("segment_overrides", [])
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        overrides: list[SegmentOverridePayload] = attrs.get("segment_overrides", [])
         if any(o.get("multivariate_feature_state_values") for o in overrides):
             feature = Feature.objects.filter(
-                project_id=self.environment.project_id, **data["feature"]
+                project_id=self.environment.project_id, **attrs["feature"]
             ).first()
             if feature is not None:
                 for override in overrides:
-                    validate_multivariate_state_values(
-                        feature,
-                        override.get("multivariate_feature_state_values", []),
-                    )
-        return data
+                    mv_overrides = override.get("multivariate_feature_state_values", [])
+                    validate_multivariate_state_values(feature, mv_overrides)
+        return attrs
 
     @property
-    def change_set_v2(self) -> FlagChangeSetV2:
+    def change_set(self) -> FlagChangeSetOptionB:
         validated_data = self.validated_data
 
         env_default = validated_data["environment_default"]
@@ -235,7 +243,7 @@ class UpdateFlagV2Serializer(BaseFeatureUpdateSerializer):
             )
             segment_overrides.append(segment_override)
 
-        return FlagChangeSetV2(
+        return FlagChangeSetOptionB(
             author=AuthorData.from_request(self.context["request"]),
             environment_default_enabled=env_default["enabled"],
             environment_default_value=env_value_data["value"],
@@ -243,20 +251,24 @@ class UpdateFlagV2Serializer(BaseFeatureUpdateSerializer):
             segment_overrides=segment_overrides,
         )
 
-    def save(self, **kwargs: object) -> None:
+    def save(self, **kwargs: object) -> FlagChangeSetOptionB:
         feature = self.get_feature()
-        update_flag_v2(self.environment, feature, self.change_set_v2)
+        change_set = self.change_set
+        update_flag_option_b(self.environment, feature, change_set)
+        return change_set
 
 
-class SegmentIdentifierSerializer(serializers.Serializer):  # type: ignore[type-arg]
+class SegmentIdentifierSerializer(serializers.Serializer[SegmentIdentifierPayload]):
     id = serializers.IntegerField(required=True)
 
 
-class DeleteSegmentOverrideSerializer(BaseFeatureUpdateSerializer):
+class DeleteSegmentOverrideSerializer(BaseFeatureUpdateSerializer[None]):
     feature = FeatureIdentifierSerializer(required=True)
     segment = SegmentIdentifierSerializer(required=True)
 
-    def validate_segment(self, value: dict) -> dict:  # type: ignore[type-arg]
+    def validate_segment(
+        self, value: SegmentIdentifierPayload
+    ) -> SegmentIdentifierPayload:
         if value and value.get("id"):
             self.validate_segment_id(value["id"])
         return value
