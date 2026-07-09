@@ -295,12 +295,13 @@ def apply_feature_state_changes(
     multivariate_values: list[MultivariateValueChangeSet] | None,
 ) -> None:
     """Apply only the provided parts of a change; omissions are left intact."""
-    if enabled is not None:
-        feature_state.enabled = enabled
-        feature_state.save()
-    if value is not None:
-        _update_feature_state_value(feature_state.feature_state_value, value)
-    update_multivariate_values(feature_state, multivariate_values)
+    with transaction.atomic():
+        if enabled is not None:
+            feature_state.enabled = enabled
+            feature_state.save()
+        if value is not None:
+            _update_feature_state_value(feature_state.feature_state_value, value)
+        update_multivariate_values(feature_state, multivariate_values)
 
 
 def _reconcile_environment_multivariate_options(
