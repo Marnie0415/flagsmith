@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from typing import TypeAlias, TypeVar, cast
+from typing import Any, TypeAlias, TypeVar, cast
 
 from rest_framework import serializers
 
@@ -148,6 +148,9 @@ class UpdateFlagOptionASerializer(BaseFeatureUpdateSerializer[FeatureState]):
             return attrs
         if attrs.get("segment"):
             _validate_segment_options(attrs["feature"], options)
+            _validate_segment_mv_options_values(
+                self.initial_data.get("multivariate_options", [])
+            )
         else:
             _validate_environment_options(attrs["feature"], options)
         return attrs
@@ -268,6 +271,11 @@ class UpdateFlagOptionBSerializer(BaseFeatureUpdateSerializer[FlagChangeSetOptio
             validate_multivariate_state_values(
                 feature, override.get("multivariate_feature_state_values", [])
             )
+
+        for raw_override in self.initial_data.get("segment_overrides", []):
+            _validate_segment_mv_options_values(
+                raw_override.get("multivariate_options", [])
+            )
         return attrs
 
     @property
@@ -381,6 +389,15 @@ def _validate_segment_options(feature: Feature, options: _OptionPayloads) -> Non
         )
     if error := _option_ownership_error(feature, _option_ids(options)):
         raise serializers.ValidationError({"multivariate_options": error})
+
+
+def _validate_segment_mv_options_values(raw_options: Any) -> None:
+    if any("value" in option for option in raw_options):
+        raise serializers.ValidationError(
+            {
+                "multivariate_options": "Segment overrides can only re-weight existing variants."
+            }
+        )
 
 
 def _option_ids(options: _OptionPayloads) -> list[int]:

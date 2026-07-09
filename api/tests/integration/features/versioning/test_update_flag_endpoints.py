@@ -539,6 +539,25 @@ def test_update_flag__invalid_environment_multivariate_options__responds_400(
                     {"multivariate_options": ["Multivariate options must be unique"]},
                 ],
             ),
+            SimpleNamespace(
+                id="with-value",
+                payload=lambda multivariate_option_id, **_: {
+                    "multivariate_options": [
+                        {
+                            "id": multivariate_option_id,
+                            "percentage_allocation": 50,
+                            "value": {"type": "string", "value": "variant"},
+                        },
+                    ],
+                },
+                expected_errors=[
+                    {
+                        "multivariate_options": [
+                            "Segment overrides can only re-weight existing variants.",
+                        ],
+                    },
+                ],
+            ),
         ]
         for test_case in [
             pytest.param(
