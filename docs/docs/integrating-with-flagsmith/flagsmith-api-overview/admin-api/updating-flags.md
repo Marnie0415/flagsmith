@@ -76,7 +76,8 @@ curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environmen
 
 Change a feature's value — for example, setting a rate limit.
 
-**Option A**
+**Option A** —
+[`POST /api/experiments/environments/{environment_key}/update-flag-v1/`](https://api.flagsmith.com/api/v1/docs/#/experimental/api_experiments_environments_update_flag_v1_create)
 
 ```bash
 curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environment_key}/update-flag-v1/' \
@@ -89,7 +90,8 @@ curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environmen
   }'
 ```
 
-**Option B**
+**Option B** —
+[`POST /api/experiments/environments/{environment_key}/update-flag-v2/`](https://api.flagsmith.com/api/v1/docs/#/experimental/api_experiments_environments_update_flag_v2_create)
 
 ```bash
 curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environment_key}/update-flag-v2/' \
@@ -110,7 +112,8 @@ curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environmen
 
 Enable a feature for a specific segment (e.g. beta users) while keeping it off for everyone else.
 
-**Option A**
+**Option A** —
+[`POST /api/experiments/environments/{environment_key}/update-flag-v1/`](https://api.flagsmith.com/api/v1/docs/#/experimental/api_experiments_environments_update_flag_v1_create)
 
 ```bash
 curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environment_key}/update-flag-v1/' \
@@ -124,7 +127,8 @@ curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environmen
   }'
 ```
 
-**Option B** — single request:
+**Option B** —
+[`POST /api/experiments/environments/{environment_key}/update-flag-v2/`](https://api.flagsmith.com/api/v1/docs/#/experimental/api_experiments_environments_update_flag_v2_create)
 
 ```bash
 curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environment_key}/update-flag-v2/' \
@@ -146,7 +150,8 @@ curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environmen
   }'
 ```
 
-The `priority` field on segment overrides is optional. Omit it to add at the lowest priority. Priority `1` is highest.
+The `priority` field on segment overrides is optional. Omit it to add at the lowest priority. The lowest number has the
+highest priority.
 
 ---
 
@@ -154,10 +159,11 @@ The `priority` field on segment overrides is optional. Omit it to add at the low
 
 Set different values per segment — for example, pricing tiers.
 
-**Option A** — one request per segment override plus one for the default:
+**Option A** —
+[`POST /api/experiments/environments/{environment_key}/update-flag-v1/`](https://api.flagsmith.com/api/v1/docs/#/experimental/api_experiments_environments_update_flag_v1_create)
 
 ```bash
-# Default
+# Set environment default
 curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environment_key}/update-flag-v1/' \
   -H 'Authorization: Api-Key <your_token>' \
   -H 'Content-Type: application/json' \
@@ -167,7 +173,7 @@ curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environmen
     "value": {"type": "string", "value": "standard"}
   }'
 
-# Enterprise segment (highest priority)
+# Set override for segment "Enterprise" (higher priority)
 curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environment_key}/update-flag-v1/' \
   -H 'Authorization: Api-Key <your_token>' \
   -H 'Content-Type: application/json' \
@@ -178,7 +184,7 @@ curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environmen
     "value": {"type": "string", "value": "enterprise"}
   }'
 
-# Premium segment
+# Set override for segment "Premium"
 curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environment_key}/update-flag-v1/' \
   -H 'Authorization: Api-Key <your_token>' \
   -H 'Content-Type: application/json' \
@@ -190,7 +196,8 @@ curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environmen
   }'
 ```
 
-**Option B** — single request:
+**Option B** —
+[`POST /api/experiments/environments/{environment_key}/update-flag-v2/`](https://api.flagsmith.com/api/v1/docs/#/experimental/api_experiments_environments_update_flag_v2_create)
 
 ```bash
 curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environment_key}/update-flag-v2/' \
@@ -230,7 +237,8 @@ Set up multivariate flags and customise weights per segment.
 - Deleting a multivariate option also deletes it in every segment override.
 - Segments already overriding multivariate options do not gain new variants added to the environment automatically.
 
-**Option A**
+**Option A** —
+[`POST /api/experiments/environments/{environment_key}/update-flag-v1/`](https://api.flagsmith.com/api/v1/docs/#/experimental/api_experiments_environments_update_flag_v1_create)
 
 ```bash
 # First, configure multivariate flags in the environment
@@ -278,7 +286,8 @@ curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environmen
   }'
 ```
 
-**Option B**
+**Option B** —
+[`POST /api/experiments/environments/{environment_key}/update-flag-v2/`](https://api.flagsmith.com/api/v1/docs/#/experimental/api_experiments_environments_update_flag_v2_create)
 
 ```bash
 # Configure the environment default and its multivariate options
@@ -377,17 +386,3 @@ curl -X POST 'https://api.flagsmith.com/api/experiments/environments/{environmen
     "segment": {"id": 202}
   }'
 ```
-
----
-
-## Quick reference
-
-| Aspect             | Details                                                    |
-| ------------------ | ---------------------------------------------------------- |
-| Feature ID         | `name` or `id` — use one, not both                         |
-| Value types        | `string`, `integer`, `boolean`                             |
-| Segment priority   | Optional — omit to add at lowest priority; `1` is highest  |
-| Feature Versioning | Works the same whether enabled or not                      |
-| Success response   | `204 No Content`                                           |
-| Limitations        | Incompatible with change requests                          |
-| Full API schema    | [Swagger Explorer](https://api.flagsmith.com/api/v1/docs/) |
