@@ -58,7 +58,7 @@ class MultivariateOptionChangeSet:
     """An environment-level variant to create, update, or re-weight."""
 
     percentage_allocation: float
-    # Absent id creates the option; value present (re)sets its variant value.
+    # Absent id creates the variant; value present (re)sets its value.
     id: int | None = None
     value: FeatureValue | None = None
 

@@ -504,7 +504,7 @@ def test_update_flag__invalid_environment_multivariate_options__responds_400(
                 expected_errors=[
                     {  # Option A
                         "multivariate_options": [
-                            "Segment overrides require an option 'id'."
+                            "Segment overrides require a variant 'id'."
                         ]
                     },
                     {  # Option B

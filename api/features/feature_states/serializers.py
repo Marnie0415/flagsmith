@@ -37,7 +37,7 @@ from segments.models import Segment
 
 _InstanceT = TypeVar("_InstanceT")
 
-_OptionPayloads: TypeAlias = (
+_MultivariateOptionPayloads: TypeAlias = (
     list[MultivariateOptionPayload] | list[SegmentOverrideMultivariateOptionPayload]
 )
 
@@ -147,12 +147,12 @@ class UpdateFlagOptionASerializer(BaseFeatureUpdateSerializer[FeatureState]):
         if options is None:
             return attrs
         if attrs.get("segment"):
-            _validate_segment_options(attrs["feature"], options)
-            _validate_segment_mv_options_values(
+            _validate_segment_multivariate_options(attrs["feature"], options)
+            _validate_segment_multivariate_options_values(
                 self.initial_data.get("multivariate_options", [])
             )
         else:
-            _validate_environment_options(attrs["feature"], options)
+            _validate_environment_multivariate_options(attrs["feature"], options)
         return attrs
 
     @property
@@ -167,7 +167,7 @@ class UpdateFlagOptionASerializer(BaseFeatureUpdateSerializer[FeatureState]):
         multivariate_options = None
         if options is not None:
             if segment_id is None:
-                multivariate_options = _option_change_sets(options)
+                multivariate_options = _multivariate_option_change_sets(options)
             else:
                 multivariate_values = _reweight_change_sets(options)
 
@@ -208,7 +208,7 @@ class MultivariateValueSerializer(serializers.Serializer[MultivariateValuePayloa
 class SegmentOverrideMultivariateOptionSerializer(
     serializers.Serializer[SegmentOverrideMultivariateOptionPayload]
 ):
-    """A re-weight of an option that already exists on the feature."""
+    """A re-weight of a variant that already exists on the feature."""
 
     id = serializers.IntegerField(required=True)
     percentage_allocation = serializers.FloatField(
@@ -262,18 +262,18 @@ class UpdateFlagOptionBSerializer(BaseFeatureUpdateSerializer[FlagChangeSetOptio
         environment_default = attrs.get("environment_default", {})
         env_options = environment_default.get("multivariate_options")
         if env_options is not None:
-            _validate_environment_options(feature, env_options)
+            _validate_environment_multivariate_options(feature, env_options)
 
         for override in attrs.get("segment_overrides", []):
             options = override.get("multivariate_options")
             if options is not None:
-                _validate_segment_options(feature, options)
+                _validate_segment_multivariate_options(feature, options)
             validate_multivariate_state_values(
                 feature, override.get("multivariate_feature_state_values", [])
             )
 
         for raw_override in self.initial_data.get("segment_overrides", []):
-            _validate_segment_mv_options_values(
+            _validate_segment_multivariate_options_values(
                 raw_override.get("multivariate_options", [])
             )
         return attrs
@@ -303,7 +303,9 @@ class UpdateFlagOptionBSerializer(BaseFeatureUpdateSerializer[FlagChangeSetOptio
             environment_default_enabled=env_default.get("enabled"),
             environment_default_value=env_value,
             environment_default_multivariate_options=(
-                _option_change_sets(env_options) if env_options is not None else None
+                _multivariate_option_change_sets(env_options)
+                if env_options is not None
+                else None
             ),
             segment_overrides=segment_overrides,
         )
@@ -351,9 +353,9 @@ class DeleteSegmentOverrideSerializer(BaseFeatureUpdateSerializer[None]):
 def validate_multivariate_state_values(
     feature: Feature, multivariate_values: list[MultivariateValuePayload]
 ) -> None:
-    """Validate the weights reference unique options belonging to the feature."""
+    """Validate the weights reference unique variants belonging to the feature."""
     option_ids = [mv["multivariate_feature_option"] for mv in multivariate_values]
-    if error := _option_ownership_error(feature, option_ids):
+    if error := _multivariate_option_ownership_error(feature, option_ids):
         raise serializers.ValidationError(error)
 
 
@@ -364,7 +366,7 @@ def _environment(context: Mapping[str, object]) -> Environment:
         raise serializers.ValidationError("Environment context is required")
 
 
-def _validate_environment_options(
+def _validate_environment_multivariate_options(
     feature: Feature, options: list[MultivariateOptionPayload]
 ) -> None:
     # The environment list is absolute, so its allocations must total <= 100%
@@ -377,21 +379,27 @@ def _validate_environment_options(
                 )
             }
         )
-    if error := _option_ownership_error(feature, _option_ids(options)):
+    if error := _multivariate_option_ownership_error(
+        feature, _multivariate_option_ids(options)
+    ):
         raise serializers.ValidationError({"multivariate_options": error})
 
 
-def _validate_segment_options(feature: Feature, options: _OptionPayloads) -> None:
-    """Segment overrides can only re-weight options already on the feature."""
+def _validate_segment_multivariate_options(
+    feature: Feature, options: _MultivariateOptionPayloads
+) -> None:
+    """Segment overrides can only re-weight variants already on the feature."""
     if any("id" not in option for option in options):
         raise serializers.ValidationError(
-            {"multivariate_options": "Segment overrides require an option 'id'."}
+            {"multivariate_options": "Segment overrides require a variant 'id'."}
         )
-    if error := _option_ownership_error(feature, _option_ids(options)):
+    if error := _multivariate_option_ownership_error(
+        feature, _multivariate_option_ids(options)
+    ):
         raise serializers.ValidationError({"multivariate_options": error})
 
 
-def _validate_segment_mv_options_values(raw_options: Any) -> None:
+def _validate_segment_multivariate_options_values(raw_options: Any) -> None:
     if any("value" in option for option in raw_options):
         raise serializers.ValidationError(
             {
@@ -400,11 +408,13 @@ def _validate_segment_mv_options_values(raw_options: Any) -> None:
         )
 
 
-def _option_ids(options: _OptionPayloads) -> list[int]:
+def _multivariate_option_ids(options: _MultivariateOptionPayloads) -> list[int]:
     return list(filter(None, [option.get("id") for option in options]))
 
 
-def _option_ownership_error(feature: Feature, option_ids: list[int]) -> str | None:
+def _multivariate_option_ownership_error(
+    feature: Feature, option_ids: list[int]
+) -> str | None:
     if not option_ids:
         return None
     if len(option_ids) != len(set(option_ids)):
@@ -432,7 +442,7 @@ def _segment_override_values(
     return None
 
 
-def _option_change_sets(
+def _multivariate_option_change_sets(
     options: list[MultivariateOptionPayload],
 ) -> list[MultivariateOptionChangeSet]:
     change_sets = []
@@ -448,7 +458,7 @@ def _option_change_sets(
 
 
 def _reweight_change_sets(
-    options: _OptionPayloads,
+    options: _MultivariateOptionPayloads,
 ) -> list[MultivariateValueChangeSet]:
     return [
         MultivariateValueChangeSet(

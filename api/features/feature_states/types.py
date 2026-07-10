@@ -49,7 +49,7 @@ class MultivariateOptionPayload(_BaseMultivariateOptionPayload):
 
 
 class SegmentOverrideMultivariateOptionPayload(_BaseMultivariateOptionPayload):
-    """A re-weight of an option that already exists on the feature."""
+    """A re-weight of a variant that already exists on the feature."""
 
     id: int
 

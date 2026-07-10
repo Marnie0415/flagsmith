@@ -253,7 +253,7 @@ def update_multivariate_values(
     feature_state: FeatureState,
     values: list[MultivariateValueChangeSet] | None,
 ) -> None:
-    """Create or re-weight the state's allocations; omitted options are kept."""
+    """Create or re-weight the state's allocations; omitted variants are kept."""
     if values is None:
         return
 
@@ -309,7 +309,7 @@ def _reconcile_environment_multivariate_options(
     environment_default_state: FeatureState,
     options: list[MultivariateOptionChangeSet],
 ) -> None:
-    """Create, update, or delete environment-level MVs from `options` as SoT"""
+    """Create, update, or delete the feature's variants to match the given list."""
     kept_ids = {option.id for option in options if option.id is not None}
     for obsolete in feature.multivariate_options.exclude(id__in=kept_ids):
         obsolete.delete()
