@@ -109,8 +109,8 @@ class FeatureValueSerializer(serializers.Serializer[FeatureValuePayload]):
 class UpdateFlagOptionASerializer(BaseFeatureUpdateSerializer[FeatureState]):
     feature = FeatureIdentifierSerializer(required=True)
     segment = FeatureUpdateSegmentDataSerializer(required=False)
-    enabled = serializers.BooleanField(required=True)
-    value = FeatureValueSerializer(required=True)
+    enabled = serializers.BooleanField(required=False)
+    value = FeatureValueSerializer(required=False)
 
     def validate_segment(self, value: SegmentPayload) -> SegmentPayload:
         if value and "id" in value:
@@ -138,8 +138,8 @@ class UpdateFlagOptionASerializer(BaseFeatureUpdateSerializer[FeatureState]):
 
 
 class EnvironmentDefaultSerializer(serializers.Serializer[EnvironmentDefaultPayload]):
-    enabled = serializers.BooleanField(required=True)
-    value = FeatureValueSerializer(required=True)
+    enabled = serializers.BooleanField(required=False)
+    value = FeatureValueSerializer(required=False)
 
 
 class MultivariateValueSerializer(serializers.Serializer[MultivariateValuePayload]):
@@ -167,8 +167,8 @@ def validate_multivariate_state_values(
 class SegmentOverrideSerializer(serializers.Serializer[SegmentOverridePayload]):
     segment_id = serializers.IntegerField(required=True)
     priority = serializers.IntegerField(required=False, allow_null=True)
-    enabled = serializers.BooleanField(required=True)
-    value = FeatureValueSerializer(required=True)
+    enabled = serializers.BooleanField(required=False)
+    value = FeatureValueSerializer(required=False)
     multivariate_feature_state_values = MultivariateValueSerializer(
         many=True, required=False
     )
@@ -176,7 +176,7 @@ class SegmentOverrideSerializer(serializers.Serializer[SegmentOverridePayload]):
 
 class UpdateFlagOptionBSerializer(BaseFeatureUpdateSerializer[FlagChangeSetOptionB]):
     feature = FeatureIdentifierSerializer(required=True)
-    environment_default = EnvironmentDefaultSerializer(required=True)
+    environment_default = EnvironmentDefaultSerializer(required=False)
     segment_overrides = SegmentOverrideSerializer(many=True, required=False)
 
     def validate_segment_overrides(

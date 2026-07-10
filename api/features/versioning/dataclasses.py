@@ -23,9 +23,9 @@ class Conflict(BaseModel):
 @dataclass
 class FlagChangeSetOptionA:
     author: AuthorData
-    enabled: bool
-    feature_state_value: str
-    type_: FeatureValueType
+    enabled: bool | None = None
+    feature_state_value: str | None = None
+    type_: FeatureValueType | None = None
 
     segment_id: int | None = None
     segment_priority: int | None = None
@@ -41,9 +41,9 @@ class MultivariateValueChangeSet:
 @dataclass
 class SegmentOverrideChangeSet:
     segment_id: int
-    enabled: bool
-    feature_state_value: str
-    type_: FeatureValueType
+    enabled: bool | None = None
+    feature_state_value: str | None = None
+    type_: FeatureValueType | None = None
     priority: int | None = None
     multivariate_values: list[MultivariateValueChangeSet] | None = None
 
@@ -51,8 +51,8 @@ class SegmentOverrideChangeSet:
 @dataclass
 class FlagChangeSetOptionB:
     author: AuthorData
-    environment_default_enabled: bool
-    environment_default_value: str
-    environment_default_type: FeatureValueType
+    environment_default_enabled: bool | None = None
+    environment_default_value: str | None = None
+    environment_default_type: FeatureValueType | None = None
 
     segment_overrides: list[SegmentOverrideChangeSet] = field(default_factory=list)

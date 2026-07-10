@@ -26,13 +26,13 @@ class MultivariateValuePayload(TypedDict):
 
 
 class EnvironmentDefaultPayload(TypedDict):
-    enabled: bool
-    value: FeatureValuePayload
+    enabled: NotRequired[bool]
+    value: NotRequired[FeatureValuePayload]
 
 
 class SegmentOverridePayload(TypedDict):
     segment_id: int
     priority: NotRequired[int | None]
-    enabled: bool
-    value: FeatureValuePayload
+    enabled: NotRequired[bool]
+    value: NotRequired[FeatureValuePayload]
     multivariate_feature_state_values: NotRequired[list[MultivariateValuePayload]]
