@@ -164,6 +164,12 @@ def test_update_flag__environment_defaults__updates_multivariate_options(
             "multivariate_feature_option__string_value", "percentage_allocation"
         )
     ) == {"halfer": 25}
+    assert (
+        MultivariateFeatureOption.objects.get(
+            id=mv_option_50_percent
+        ).default_percentage_allocation
+        == 25
+    )
 
 
 @pytest.mark.parametrize(

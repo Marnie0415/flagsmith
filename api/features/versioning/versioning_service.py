@@ -327,10 +327,11 @@ def _reconcile_environment_multivariate_options(
             option_id = mv_option.id
         else:
             option_id = option.id
+            mv_option = feature.multivariate_options.get(id=option_id)
             if option.value is not None:
-                mv_option = feature.multivariate_options.get(id=option_id)
                 mv_option.set_value(option.value.value, option.value.type_)
-                mv_option.save()
+            mv_option.default_percentage_allocation = option.percentage_allocation
+            mv_option.save()
         allocations.append(
             MultivariateValueChangeSet(
                 multivariate_feature_option_id=option_id,
