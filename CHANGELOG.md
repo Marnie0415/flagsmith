@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.253.0](https://github.com/Flagsmith/flagsmith/compare/v2.252.0...v2.253.0) (2026-07-11)
+
+
+### Features
+
+* **API:** Adopt the `flagsmith` entrypoint ([#7901](https://github.com/Flagsmith/flagsmith/issues/7901)) ([da194ca](https://github.com/Flagsmith/flagsmith/commit/da194caa5b2e70e9707767aa871bbeac3c2eaf00))
+* **API:** Bundle the Core API OpenAPI schema ([#7959](https://github.com/Flagsmith/flagsmith/issues/7959)) ([a7b0d21](https://github.com/Flagsmith/flagsmith/commit/a7b0d217f714d4c59ae78023b3d7147d6c5da095))
+* use lifecycles API ([#7793](https://github.com/Flagsmith/flagsmith/issues/7793)) ([26ddf19](https://github.com/Flagsmith/flagsmith/commit/26ddf1954d392e540a02cdef295ee0aead4e7b26))
+
+
+### Bug Fixes
+
+* add navigation to identity page from segment members list ([#7927](https://github.com/Flagsmith/flagsmith/issues/7927)) ([f005081](https://github.com/Flagsmith/flagsmith/commit/f0050811918669345718f5f858af8ec900418ee8))
+* **dark mode:** resolve .text-secondary to the token, not Bootstrap ([#7981](https://github.com/Flagsmith/flagsmith/issues/7981)) ([3eeaf38](https://github.com/Flagsmith/flagsmith/commit/3eeaf388006ff11322a6f991e44dcccc9f1829f2))
+* **LaunchDarkly:** Import processing not idempotent for completed requests ([#7954](https://github.com/Flagsmith/flagsmith/issues/7954)) ([5cfb9f4](https://github.com/Flagsmith/flagsmith/commit/5cfb9f463bcbb40c8c3416e2fdc363ff7e023dd4))
+* make Headway bell icon clickable ([#7925](https://github.com/Flagsmith/flagsmith/issues/7925)) ([fd438ba](https://github.com/Flagsmith/flagsmith/commit/fd438ba099d8f2e5d23cac0499639f605a6fedc7))
+* **Segment Membership:** Enabled for different organisations in backend and frontend ([#7966](https://github.com/Flagsmith/flagsmith/issues/7966)) ([aa4ad62](https://github.com/Flagsmith/flagsmith/commit/aa4ad62f2bab161d0b5d9a24154ad6dc80785895))
+
+
+### Dependency Updates
+
+* **api:** update dependency django to v5.2.16 [security] ([#7990](https://github.com/Flagsmith/flagsmith/issues/7990)) ([1c73453](https://github.com/Flagsmith/flagsmith/commit/1c73453daf1bc5769f14b3ee69291072e44746dc))
+
 ## [2.252.0](https://github.com/Flagsmith/flagsmith/compare/v2.251.0...v2.252.0) (2026-07-03)
 
 
